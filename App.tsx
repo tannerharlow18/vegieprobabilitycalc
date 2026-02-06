@@ -31,7 +31,45 @@ const INITIAL_MODIFIERS: TacticalModifiers = {
   poisonWeaponsThreshold: 12,
   venomRay: false,
   giftOfTheEmpressAura: false,
-  headbutt: false
+  headbutt: false,
+  amuletOfPaivatar: false,
+  amuletThreshold1: 8,
+  amuletThreshold2: 17
+};
+
+// Map of keys to their UI order
+const UI_POWER_ORDER = [
+  'deadlyStrike', 'chainAxe', 'orcBattleCryAura', 'hypnosis', 'headbutt', 
+  'hasAutoSkulls', 'paralyzingStare', 'netTrip', 'poisonWeapons', 'maul', 
+  'lethalSting', 'venomRay', 'counterStrike', 'd20IgnoreWounds', 'stealthDodge', 
+  'shieldsOfValor', 'oneShieldDefense', 'rerollOneDefense', 'hasAutoShields', 
+  'amuletOfPaivatar', 'heroicDefenseAura', 'giftOfTheEmpressAura', 'magneticDeflectorShield'
+];
+
+const POWER_DESCRIPTIONS: Record<string, { label: string; desc: string }> = {
+  deadlyStrike: { label: "Deadly Strike", desc: "Each skull rolled counts as 2 hits." },
+  chainAxe: { label: "Reroll 1 Attack", desc: "Attacker rerolls one die that die not show a skull." },
+  orcBattleCryAura: { label: "Orc Battle Cry", desc: "Blanks are counted as skulls. Increases the probability of rolling a skull to 4/6 (66.7%)." },
+  hypnosis: { label: "Hypnosis", desc: "Reduces the defender's defense dice by the number of skulls rolled." },
+  headbutt: { label: "Headbutt", desc: "If skulls and shields rolled are equal, both figures receive 1 wound." },
+  hasAutoSkulls: { label: "Automatic Skull", desc: "Add 1 automatic skull to results. Can modify via dropdown to 2 or 3." },
+  paralyzingStare: { label: "Paralyzing Stare / Whip", desc: "D20 roll to reduce the defender's defense dice to 0." },
+  netTrip: { label: "Net Trip", desc: "D20 roll to reduce the defender's defense dice to 1." },
+  poisonWeapons: { label: "Poison Weapons", desc: "D20 roll to inflict one extra wound, if at least one wound was dealt." },
+  maul: { label: "Maul / Venomous Sting", desc: "If all attack dice are skulls, the defender takes maximum damage (shields ignored)." },
+  lethalSting: { label: "All As One / Lethal Sting", desc: "If all attack dice are skulls, the defender is instantly destroyed." },
+  venomRay: { label: "Venom Ray / Poison Sting", desc: "After dealing damage, roll for extra wounds. 45% stop, 50% one wound and continue, 5% destroy." },
+  counterStrike: { label: "Counter Strike", desc: "Excess shields deal damage back to the attacker." },
+  d20IgnoreWounds: { label: "D20 Ignore Wounds", desc: "Chance to ignore all wounds from an attack (e.g., Vanish/Stealth Suit/Concealment)." },
+  stealthDodge: { label: "Stealth Dodge / Defensive Agility", desc: "Rolling at least one shield blocks all damage." },
+  shieldsOfValor: { label: "Shields of Valor", desc: "Each shield rolled counts as 2 blocks." },
+  oneShieldDefense: { label: "One Shield Defense", desc: "If at least one shield is rolled, the figure takes a maximum of 1 wound." },
+  rerollOneDefense: { label: "Reroll 1 Defense", desc: "Defender rerolls one die that die not show a shield." },
+  hasAutoShields: { label: "Automatic Shield", desc: "Add 1 automatic shield to results. Can modify via dropdown to 2 or 3." },
+  amuletOfPaivatar: { label: "Amulet of Paivatar", desc: "Roll 8-16 to ignore all but 1 wound; roll 17-20 to ignore all wounds" },
+  heroicDefenseAura: { label: "Heroic Defense Aura", desc: "Blanks are counted as shields. Increases the probability of rolling a skull to 3/6 (50%)." },
+  giftOfTheEmpressAura: { label: "Gift of the Empress Aura", desc: "Defender rerolls all non-shield dice once." },
+  magneticDeflectorShield: { label: "Magnetic Deflector Shield", desc: "Converts one blank die into a shield." }
 };
 
 const App: React.FC = () => {
@@ -49,9 +87,16 @@ const App: React.FC = () => {
     setModifiers(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const updateNumericModifier = (key: 'autoSkulls' | 'autoShields' | 'd20Threshold' | 'paralyzingStareThreshold' | 'netTripThreshold' | 'poisonWeaponsThreshold', val: number) => {
+  const updateNumericModifier = (key: keyof TacticalModifiers, val: number) => {
     setModifiers(prev => ({ ...prev, [key]: val }));
   };
+
+  const activePowers = useMemo(() => {
+    return Object.entries(modifiers)
+      .filter(([key, val]) => val === true && POWER_DESCRIPTIONS[key])
+      .map(([key]) => key)
+      .sort((a, b) => UI_POWER_ORDER.indexOf(a) - UI_POWER_ORDER.indexOf(b));
+  }, [modifiers]);
 
   const d20Options = Array.from({ length: 20 }, (_, i) => i + 1);
   const autoOptions = [1, 2, 3];
@@ -72,10 +117,10 @@ const App: React.FC = () => {
 
         <div className="flex flex-col items-center">
           <h1 className={`text-4xl md:text-5xl font-bold tracking-tight mb-1 font-sans transition-colors ${isDark ? 'text-emerald-500' : 'text-emerald-600'}`}>
-            Sterilizing Pear 2
+            Vegie Probability Calc
           </h1>
           <p className={`${isDark ? 'text-slate-400' : 'text-slate-500'} text-sm md:text-lg font-semibold tracking-tight transition-colors`}>
-            Heroscape Probability Calculator
+            for Heroscape
           </p>
         </div>
 
@@ -141,9 +186,11 @@ const App: React.FC = () => {
           }`}>
             <button 
               onClick={() => setIsPowersExpanded(!isPowersExpanded)}
-              className="w-full flex items-center justify-between group"
+              className={`w-full flex items-center justify-between group transition-all duration-300 ${
+                isPowersExpanded ? 'border-b pb-2' : 'border-b border-transparent'
+              } ${isDark ? 'border-slate-800' : 'border-slate-100'}`}
             >
-              <h2 className={`text-xl font-semibold tracking-tight border-b border-transparent transition-colors flex items-center gap-2 ${
+              <h2 className={`text-xl font-semibold tracking-tight transition-colors flex items-center gap-2 ${
                 isDark ? 'text-slate-100 group-hover:text-emerald-400' : 'text-slate-900 group-hover:text-emerald-600'
               }`}>
                 <svg className={`w-5 h-5 ${isDark ? 'text-emerald-500' : 'text-emerald-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -160,7 +207,7 @@ const App: React.FC = () => {
               </div>
             </button>
             
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 overflow-hidden transition-all duration-500 ease-in-out ${isPowersExpanded ? 'max-h-[1400px] mt-6 opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 overflow-hidden transition-all duration-500 ease-in-out ${isPowersExpanded ? 'max-h-[1600px] mt-6 opacity-100' : 'max-h-0 opacity-0'}`}>
               <div className="space-y-3">
                 <span className={`text-[11px] font-bold uppercase tracking-tight block mb-2 ${isDark ? 'text-red-400' : 'text-red-800'}`}>Attacker</span>
                 <div className="space-y-4">
@@ -377,13 +424,63 @@ const App: React.FC = () => {
                               value={modifiers.autoShields}
                               onChange={(e) => updateNumericModifier('autoShields', parseInt(e.target.value))}
                               className={`text-[10px] font-bold border rounded px-1 py-0.5 focus:outline-none min-w-[3rem] ${
-                                isDark ? 'bg-slate-800 text-blue-400 border-slate-700 focus:border-blue-500' : 'bg-slate-50 text-blue-800 border-slate-200 focus:border-blue-800'
+                                isDark ? 'bg-slate-800 text-blue-400 border-slate-700 focus:border-red-500' : 'bg-slate-50 text-blue-800 border-slate-200 focus:border-blue-800'
                               }`}
                             >
                               {autoOptions.map(opt => (
                                 <option key={opt} value={opt}>{opt}</option>
                               ))}
                             </select>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <div className="relative">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={modifiers.amuletOfPaivatar}
+                          onChange={() => toggleModifier('amuletOfPaivatar')}
+                        />
+                        <div className={`w-10 h-6 rounded-full transition-colors ${isDark ? 'bg-slate-800 peer-checked:bg-blue-600' : 'bg-slate-200 peer-checked:bg-blue-800'}`}></div>
+                        <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full peer-checked:translate-x-4 transition-transform"></div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <span className={`text-xs font-medium transition-colors ${isDark ? 'text-slate-300 group-hover:text-white' : 'text-slate-600 group-hover:text-slate-900'}`}>Amulet of Paivatar</span>
+                        {modifiers.amuletOfPaivatar && (
+                          <div className="flex flex-col gap-2 ml-1 animate-in slide-in-from-left-2 duration-300" onClick={(e) => e.stopPropagation()}>
+                             <div className="flex items-center gap-2">
+                               <span className={`text-[10px] font-bold uppercase tracking-tight ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Ignore -1 on</span>
+                               <select 
+                                 value={modifiers.amuletThreshold1}
+                                 onChange={(e) => updateNumericModifier('amuletThreshold1', parseInt(e.target.value))}
+                                 className={`text-[10px] font-bold border rounded px-1 py-0.5 focus:outline-none min-w-[3rem] ${
+                                   isDark ? 'bg-slate-800 text-blue-400 border-slate-700 focus:border-blue-500' : 'bg-slate-50 text-blue-800 border-slate-200 focus:border-blue-800'
+                                 }`}
+                               >
+                                 {d20Options.map(opt => (
+                                   <option key={opt} value={opt}>{opt}+</option>
+                                 ))}
+                               </select>
+                             </div>
+                             <div className="flex items-center gap-2">
+                               <span className={`text-[10px] font-bold uppercase tracking-tight ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Ignore All on</span>
+                               <select 
+                                 value={modifiers.amuletThreshold2}
+                                 onChange={(e) => updateNumericModifier('amuletThreshold2', parseInt(e.target.value))}
+                                 className={`text-[10px] font-bold border rounded px-1 py-0.5 focus:outline-none min-w-[3rem] ${
+                                   isDark ? 'bg-slate-800 text-blue-400 border-slate-700 focus:border-blue-500' : 'bg-slate-50 text-blue-800 border-slate-200 focus:border-blue-800'
+                                 }`}
+                               >
+                                 {d20Options.map(opt => (
+                                   <option key={opt} value={opt}>{opt}+</option>
+                                 ))}
+                               </select>
+                             </div>
                           </div>
                         )}
                       </div>
@@ -552,6 +649,37 @@ const App: React.FC = () => {
               </table>
             </div>
           </section>
+
+          {/* Standalone Power Intel Box */}
+          {activePowers.length > 0 && (
+            <section className={`flex flex-col p-6 rounded-2xl border backdrop-blur-md transition-all animate-in fade-in slide-in-from-bottom-4 ${
+              isDark ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'
+            }`}>
+              <div className={`mb-4 flex items-center justify-start border-b pb-2 ${
+                isDark ? 'text-emerald-500 border-slate-800' : 'text-emerald-600 border-slate-100'
+              }`}>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="space-y-5">
+                {activePowers.map(key => (
+                  <div key={key} className="animate-in fade-in duration-300">
+                    <span className={`block text-[10px] font-bold tracking-tight mb-1.5 ${
+                      isDark ? 'text-slate-200' : 'text-slate-900'
+                    }`}>
+                      {POWER_DESCRIPTIONS[key].label}
+                    </span>
+                    <p className={`text-xs leading-relaxed ${
+                      isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}>
+                      {POWER_DESCRIPTIONS[key].desc}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </main>
 

@@ -95,10 +95,9 @@ export const calculateHeroscapeProbabilities = (
     // Lethal Sting check: If attacker rolls all natural skulls
     if (modifiers.lethalSting && s === attackDice && attackDice > 0) {
       destroyedProbability += skullProb;
-      continue; // Skip normal defense resolution for this branch
+      continue;
     }
 
-    // Determine effective defense dice for the FAIL branch (Hypnosis might apply)
     const normalDefenseDice = modifiers.hypnosis 
       ? Math.max(0, defenseDice - s) 
       : defenseDice;
@@ -110,7 +109,6 @@ export const calculateHeroscapeProbabilities = (
       isDebuff: true 
     };
 
-    // Fix: Corrected typo 'netTripTripSuccessProb' to 'netTripSuccessProb' and simplified logic
     const scenarioBothFail = { 
       prob: (1 - stareSuccessProb) * (1 - netTripSuccessProb),
       dice: normalDefenseDice, 
@@ -132,7 +130,6 @@ export const calculateHeroscapeProbabilities = (
         shieldProbs[j] = binomialProb(effectiveDice, j, P_SHIELD);
       }
 
-      // Reroll 1 Defense logic: Reroll 1 non-shield die
       if (modifiers.rerollOneDefense && effectiveDice > 0) {
         const newShieldProbs = new Array(effectiveDice + 1).fill(0);
         for (let k = 0; k <= effectiveDice; k++) {
@@ -151,13 +148,11 @@ export const calculateHeroscapeProbabilities = (
         const skulls = (s * skullMultiplier) + attackerAutoSkulls;
         
         let modifiedD = d;
-        // Magnetic Deflector Shield: Turn one die that did not roll a shield into a shield
         if (modifiers.magneticDeflectorShield && d < effectiveDice) {
           modifiedD = d + 1;
         }
 
         let shields = (modifiedD * shieldMultiplier) + autoShields;
-        
         if (scenario.isDebuff) {
           shields = (modifiedD * shieldMultiplier); 
           if (scenario.dice === 0) shields = 0;
@@ -169,10 +164,7 @@ export const calculateHeroscapeProbabilities = (
           shields = 0;
         }
 
-        // Damage calculation
         let baseDamage = Math.max(0, skulls - shields);
-        
-        // Headbutt check: If skulls exactly equal shields
         const headbuttTriggers = modifiers.headbutt && skulls === shields;
         
         if (headbuttTriggers) {
@@ -180,7 +172,6 @@ export const calculateHeroscapeProbabilities = (
           baseDamage = 0; 
         }
         
-        // Stealth Dodge: One shield blocks all damage
         if (modifiers.stealthDodge && shields >= 1 && !headbuttTriggers) {
           baseDamage = 0;
         }
@@ -201,38 +192,63 @@ export const calculateHeroscapeProbabilities = (
           for (const ds of damageScenarios) {
             const finalBranchProb = prob * ds.p;
             
-            damageDistribution.set(0, (damageDistribution.get(0) || 0) + (finalBranchProb * d20PassChance));
-            
-            const woundInflictedProb = finalBranchProb * d20FailChance;
-
-            if (modifiers.venomRay && ds.val > 0) {
-              let currentP = woundInflictedProb;
-              let currentWounds = ds.val;
-              for (let i = 0; i < 64; i++) {
-                const pStop = currentP * 0.45;    
-                const pDestroy = currentP * 0.05; 
-                const pContinue = currentP * 0.5; 
-                const targetWounds = Math.min(DISPLAY_MAX_WOUNDS, currentWounds);
-                damageDistribution.set(targetWounds, (damageDistribution.get(targetWounds) || 0) + pStop);
-                destroyedProbability += pDestroy;
-                currentP = pContinue;
-                if (!osdTriggered) currentWounds += 1;
-                if (currentP < 1e-15) break; 
-              }
-              if (currentP > 0) {
-                const targetWounds = Math.min(DISPLAY_MAX_WOUNDS, currentWounds);
-                damageDistribution.set(targetWounds, (damageDistribution.get(targetWounds) || 0) + currentP);
-              }
+            // Amulet of Paivatar Mitigation
+            // 1-7 (Fail): Normal damage
+            // 8-16 (Partial): Ignore all but one (damage becomes 1)
+            // 17-20 (Full): Ignore all (damage becomes 0)
+            const amuletScenarios = [];
+            if (modifiers.amuletOfPaivatar) {
+              const pFail = Math.max(0, (modifiers.amuletThreshold1 - 1) / 20);
+              const pPartial = Math.max(0, (modifiers.amuletThreshold2 - modifiers.amuletThreshold1) / 20);
+              const pFull = Math.max(0, (21 - modifiers.amuletThreshold2) / 20);
+              
+              if (pFail > 0) amuletScenarios.push({ val: ds.val, p: pFail });
+              if (pPartial > 0) amuletScenarios.push({ val: 1, p: pPartial });
+              if (pFull > 0) amuletScenarios.push({ val: 0, p: pFull });
             } else {
-              const targetWounds = Math.min(DISPLAY_MAX_WOUNDS, ds.val);
-              damageDistribution.set(targetWounds, (damageDistribution.get(targetWounds) || 0) + woundInflictedProb);
+              amuletScenarios.push({ val: ds.val, p: 1.0 });
+            }
+
+            for (const am of amuletScenarios) {
+              const postAmuletProb = finalBranchProb * am.p;
+              
+              if (am.val === 0) {
+                damageDistribution.set(0, (damageDistribution.get(0) || 0) + postAmuletProb);
+              } else {
+                // Apply D20 Ignore Wounds (e.g. Warriors of Ashra / Ninjas)
+                damageDistribution.set(0, (damageDistribution.get(0) || 0) + (postAmuletProb * d20PassChance));
+                const finalWoundProb = postAmuletProb * d20FailChance;
+
+                if (modifiers.venomRay && am.val > 0) {
+                  let currentP = finalWoundProb;
+                  let currentWounds = am.val;
+                  for (let i = 0; i < 64; i++) {
+                    const pStop = currentP * 0.45;    
+                    const pDestroy = currentP * 0.05; 
+                    const pContinue = currentP * 0.5; 
+                    const targetWounds = Math.min(DISPLAY_MAX_WOUNDS, currentWounds);
+                    damageDistribution.set(targetWounds, (damageDistribution.get(targetWounds) || 0) + pStop);
+                    destroyedProbability += pDestroy;
+                    currentP = pContinue;
+                    if (!osdTriggered) currentWounds += 1;
+                    if (currentP < 1e-15) break; 
+                  }
+                  if (currentP > 0) {
+                    const targetWounds = Math.min(DISPLAY_MAX_WOUNDS, currentWounds);
+                    damageDistribution.set(targetWounds, (damageDistribution.get(targetWounds) || 0) + currentP);
+                  }
+                } else {
+                  const targetWounds = Math.min(DISPLAY_MAX_WOUNDS, am.val);
+                  damageDistribution.set(targetWounds, (damageDistribution.get(targetWounds) || 0) + finalWoundProb);
+                }
+              }
             }
           }
         } else {
           damageDistribution.set(0, (damageDistribution.get(0) || 0) + prob);
         }
 
-        // Damage to Attacker
+        // Counter Strike logic
         if (headbuttTriggers) {
           counterDistribution.set(0, (counterDistribution.get(0) || 0) + prob);
         } else if (modifiers.counterStrike && shields > skulls) {

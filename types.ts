@@ -34,6 +34,9 @@ export interface TacticalModifiers {
   venomRay: boolean;
   giftOfTheEmpressAura: boolean;
   headbutt: boolean;
+  amuletOfPaivatar: boolean;
+  amuletThreshold1: number; // Default 8: Ignore all but one
+  amuletThreshold2: number; // Default 17: Ignore all
 }
 
 export interface CalculationResult {
